@@ -78,7 +78,17 @@ python make_hf_space.py
 建一個 Space，再到 **Files → Add file → Upload files**，把 `hf-space/` 裡的檔案
 全部拖進去就好。之後改了程式，重跑一次這支再上傳一次即可。
 
-SDK 選哪個都可以，上傳包兩種都附了：
+**免費帳號只能選 Gradio + ZeroGPU。** Docker SDK 標了 `Paid`；Gradio SDK 底下的
+`CPU Basic` 是灰的，提示寫「On the free tier, Gradio Spaces run on ZeroGPU」。
+而且 Space 一旦建立，沒有 PRO 就不能把硬體改回 cpu-basic，重建也一樣選不到。
+
+ZeroGPU 開機時會掃描程式裡有沒有被 `@spaces.GPU` 裝飾的函式，掃不到就直接
+`Runtime error: No @spaces.GPU function detected during startup`。所以 `app.py`
+留了一個永遠不會被呼叫的空函式給它掃——這個專案完全跑 CPU（Basic Pitch 走 ONNX），
+一段都不需要 GPU。cpu-basic 的映像檔沒有 `spaces` 套件，那段 import 會失敗、自動跳過，
+所以同一份 `app.py` 兩種硬體通用。
+
+上傳包兩種 SDK 都附了，之後有 PRO 或換平台可以直接切：
 
 - **Gradio**：執行 `app.py`。這個專案其實沒有用 Gradio，Space 的 Gradio SDK
   做的事只是「跑 app.py，然後把 7860 埠反向代理出去」，所以 `app.py` 直接把
