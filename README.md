@@ -2,6 +2,9 @@
 
 把一首歌自動改編成《倩女幽魂》編曲介面能用的三軌 MML。
 
+**線上直接用：<https://chenpinzhen-mml-generator.hf.space>**
+（免費 Space、CPU 執行，多人同時用會排隊；要完整功能請跑本機版）
+
 丟 MP3、貼 YouTube 連結、給 MIDI，或貼別人寫好的 MML，程式會採譜、抓速度、
 分成三條單音旋律線，再寫成遊戲吃得下的 MML，分別貼進 **音軌A / 音軌B / 音軌C**。
 
