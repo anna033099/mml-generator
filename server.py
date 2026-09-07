@@ -48,7 +48,7 @@ def params_from_json(d):
         retranscribe=bool(d.get('retranscribe', False)),
         volume=int(d.get('volume', 0) or 0),
         harmony_min=str(d.get('harmony_min') or 'auto'),
-        engine=d.get('engine') if d.get('engine') in mabi3.ENGINES else 'basic-pitch',
+        climax=int(d.get('climax', 1)) if str(d.get('climax', 1)) in ('0', '1', '2') else 1,
         instrument=d.get('instrument') if d.get('instrument') in mabi3.INSTRUMENTS else 'piano',
         min_freq=float(d['min_freq']) if d.get('min_freq') else None,
         max_freq=float(d['max_freq']) if d.get('max_freq') else None,
@@ -163,8 +163,8 @@ class Handler(BaseHTTPRequestHandler):
             JOBS[job_id] = {'status': 'working', 'log': ['收到檔案：%s（%.1f MB）' % (name, len(data) / 1e6)],
                             'src': src, 'kind': 'mml' if ext == '.mml' else ('midi' if ext in ('.mid', '.midi') else 'audio'),
                             'created': time.time()}
-            # 上傳時就帶上樂器（和引擎），鼓才不會先被當成鋼琴採譜一遍
-            first = {'instrument': qs.get('instrument', [''])[0], 'engine': qs.get('engine', [''])[0]}
+            # 上傳時就帶上樂器，鼓才不會先被當成一般樂器採譜一遍
+            first = {'instrument': qs.get('instrument', [''])[0]}
             threading.Thread(target=run_job, args=(job_id, params_from_json(first)), daemon=True).start()
             return self.send_json({'job': job_id, 'kind': JOBS[job_id]['kind']})
         if u.path == '/api/youtube':

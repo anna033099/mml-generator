@@ -12,12 +12,12 @@ mabi3.py — 一首歌（MP3 / YouTube / MIDI / 現成 MML）→《倩女幽魂�
 
 常用選項：
     --instrument piano  目標樂器（piano/zither/harp/eguitar/flute/violin/drums）
-    --engine piano      改用 ByteDance 鋼琴採譜模型（預設是 Spotify Basic Pitch）
     --bpm 92            自動抓的速度不對時，直接指定
     --octave-shift -1   整體高／低一個八度
     --limit 3000        每軌字數上限，同時也是「豐富度預算」：調大自動變豐富
     --volume -3         整體音量增減
     --harmony-min 1/8   B／C 軌保留的最短音；auto = 交給字數預算決定
+    --climax 2          副歌讓路強度：主旋律衝高音時讓 B／C 退開（0=關/1=標準/2=強）
     --min-vel 20        丟掉力度低於此值的音（採譜雜音通常很小聲）
     --grid 3            每拍分 3 格（三連音為主的歌）；預設 4 格
     --retranscribe      已經採譜過時，強制重新採譜
@@ -405,67 +405,10 @@ def apply_voice_dynamics(voice, i, window, vol_shift, vrange):
         t = min(1.0, max(0.0, (sv - lo) / float(hi - lo)))
         v = vmin + t * (vmax - vmin)
         v = vmin + round((v - vmin) / step) * step
+        # 副歌讓路：退到背景。這裡是「絕對音量單位」，不是音量帶的階距——
+        # 乘上 step 的話 B 軌一次就降 8，而 B 的音量帶只有 10~14 寬，會直接壓到聽不見。
+        v -= n.get('duck', 0)
         n['v'] = int(min(15, max(1, min(vmax, v))))
-
-
-# ====================== MP3 → MIDI（鋼琴採譜模型） ======================
-CKPT_URL = 'https://zenodo.org/record/4034264/files/CRNN_note_F1%3D0.9677_pedal_F1%3D0.9186.pth?download=1'
-CKPT_PATH = os.path.join(os.path.expanduser('~'), 'piano_transcription_inference_data',
-                         'note_F1=0.9677_pedal_F1=0.9186.pth')
-
-
-def ensure_checkpoint():
-    if os.path.exists(CKPT_PATH) and os.path.getsize(CKPT_PATH) >= 1.6e8:
-        return
-    import urllib.request
-    os.makedirs(os.path.dirname(CKPT_PATH), exist_ok=True)
-    log('第一次使用，下載採譜模型（約 165 MB）…')
-
-    def hook(blocks, bs, total):
-        if total > 0:
-            done = min(100, blocks * bs * 100 // total)
-            print('\r  %3d%%' % done, end='', file=sys.stderr, flush=True)
-    try:
-        urllib.request.urlretrieve(CKPT_URL, CKPT_PATH + '.part', hook)
-        os.replace(CKPT_PATH + '.part', CKPT_PATH)
-    except Exception as e:
-        raise MabiError('模型下載失敗（%s）。請用瀏覽器打開下面網址下載，存成這個檔名後再執行一次：\n%s\n%s'
-                        % (e, CKPT_URL, CKPT_PATH))
-    log('\r  下載完成')
-
-
-def load_audio_16k(path):
-    """讀 MP3/WAV/FLAC 成 16 kHz 單聲道。先用 soundfile（免裝 ffmpeg），失敗再用 librosa。"""
-    import numpy as np
-    try:
-        import soundfile as sf
-        data, sr = sf.read(path, dtype='float32', always_2d=True)
-        y = data.mean(axis=1)
-    except Exception:
-        import librosa
-        y, sr = librosa.load(path, sr=None, mono=True)
-    if sr != 16000:
-        import librosa
-        y = librosa.resample(y, orig_sr=sr, target_sr=16000)
-    return y.astype(np.float32)
-
-
-def transcribe_piano(audio_path, mid_path):
-    """ByteDance 鋼琴採譜模型：只認鋼琴，音準，但音比較少、要下載 165 MB 模型。"""
-    try:
-        import torch
-        from piano_transcription_inference import PianoTranscription
-    except ImportError:
-        raise MabiError('這裡沒有裝鋼琴專用採譜模型（雲端版為了縮小體積沒有安裝 torch）。'
-                        '請改用預設的 Basic Pitch；本機版要用的話請跑「安裝.bat」。')
-    ensure_checkpoint()
-    _orig = torch.load                                 # 新版 torch 讀舊模型檔需要這個
-    torch.load = lambda *a, **k: _orig(*a, **{**k, 'weights_only': False})
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    log('讀音檔…')
-    y = load_audio_16k(audio_path)
-    log('採譜中（鋼琴模型 / %s，%d 秒的音檔）…' % (device, len(y) // 16000))
-    PianoTranscription(device=device, checkpoint_path=CKPT_PATH).transcribe(y, mid_path)
 
 
 def transcribe_basic_pitch(audio_path, mid_path, min_freq=None, max_freq=None,
@@ -475,7 +418,7 @@ def transcribe_basic_pitch(audio_path, mid_path, min_freq=None, max_freq=None,
     這個環境的 TensorFlow 是用 numpy 1.x 編的，在 numpy 2 底下 import 會丟 AttributeError，
     而 basic_pitch 的偵測只接 ImportError，整包會被弄掛。把 sys.modules['tensorflow']
     暫時設成 None，`import tensorflow` 就會丟 ImportError，basic_pitch 便自動選 ONNX。
-    ONNX 模型只有 228 KB、附在套件裡，不必另外下載，CPU 上比鋼琴模型快很多。
+    ONNX 模型只有 228 KB、附在套件裡，不必另外下載，CPU 上一首 5 分鐘的歌約 6 秒。
     """
     blocked = 'tensorflow' not in sys.modules
     if blocked:
@@ -600,17 +543,11 @@ def drums_to_voices(events, args):
     return voices, [(F(0), bpm)]
 
 
-ENGINES = ('basic-pitch', 'piano')
-
-
-def transcribe_audio(audio_path, mid_path, engine='basic-pitch', args=None):
-    if engine == 'piano':
-        transcribe_piano(audio_path, mid_path)
-    else:
-        transcribe_basic_pitch(
-            audio_path, mid_path,
-            min_freq=getattr(args, 'min_freq', None) or None,
-            max_freq=getattr(args, 'max_freq', None) or None)
+def transcribe_audio(audio_path, mid_path, args=None):
+    transcribe_basic_pitch(
+        audio_path, mid_path,
+        min_freq=getattr(args, 'min_freq', None) or None,
+        max_freq=getattr(args, 'max_freq', None) or None)
     log('採譜完成，MIDI 存在：' + os.path.basename(mid_path))
 
 
@@ -863,7 +800,127 @@ def resolve_clashes(voices, semitones=(1, 11, 13), min_keep=F(1, 32)):
     return voices
 
 
-def reduce_to_three(notes, melody_notes=None, inner_rule='near', vol_shift=0, profile=None):
+# ====================== 副歌讓路 ======================
+# 量過使用者實際轉的三首鋼琴 Cover：主旋律的高音段裡，B 軌有 89% 的時間在響，
+# 而且音高中位數比主旋律低 24 個半音（整整兩個八度），C 軌更低到 46 個半音；
+# 三軌都有八成以上的時間在發聲。也就是說副歌那些本該最突出的高音，底下同時
+# 壓著一整片低音，聽起來就是「沒有重點、很亂很雜」。
+#
+# 為什麼 B 軌會跑到低音區：pick_inner 用的是「跟前一個音最接近」，有慣性。
+# 主旋律在副歌往上衝，中聲部留在原地，結果就跑去跟 C 軌擠在一起，中間空掉。
+#
+# 在遊戲裡比在網頁試聽嚴重，是因為遊戲音色的延音長、低音更厚，會直接蓋掉高音。
+#
+# 這裡只動 B、C 兩軌，主旋律一個音都不改——改主旋律的方案試過兩次
+#（八度平滑、閘控取旋律），量測數字都更好，但實際聽起來音準和旋律反而更糟。
+YIELD_HI_PCT = 0.80        # 主旋律音高超過這個分位數就算「高音段」
+YIELD_MERGE = F(1, 2)      # 相鄰高音段間隔小於此就併成同一段，避免一直切換
+YIELD_PAD = F(1, 16)       # 每段前後各延伸一點，不要在樂句正中間切
+INNER_MAX_BELOW = 19       # 高音段裡 B 軌比主旋律低超過這麼多半音就讓路（一個八度又五度）
+BASS_MIN_GAP = F(1, 8)     # 高音段裡 C 軌的最小起音間隔：少走動、改拉長音
+# 高音段裡 C 軌單音的長度上限。只合併起音的話，音會變得更長、發聲時間反而更高
+#（實測 88~95%，等於低音從頭壓到尾）。加上長度上限才會留出空隙。
+# 實測 1/4：發聲時間降到 72~89%，字數幾乎沒變（1% 內）；1/8 更空但開始花字數。
+BASS_MAX_LEN = F(1, 4)
+YIELD_DUCK = (0, 2, 1)     # 高音段裡各軌音量要降幾個單位（A 不動）
+
+
+def melody_high_spans(melody, pct=YIELD_HI_PCT):
+    """主旋律的高音段落，回傳 [(起, 迄), ...]。"""
+    if len(melody) < 8:
+        return []
+    ps = sorted(n['p'] for n in melody)
+    thr = ps[min(len(ps) - 1, int(len(ps) * pct))]
+    spans = []
+    for n in sorted(melody, key=lambda n: n['s']):
+        if n['p'] < thr:
+            continue
+        a, b = n['s'] - YIELD_PAD, n['e'] + YIELD_PAD
+        if spans and a - spans[-1][1] <= YIELD_MERGE:
+            spans[-1][1] = max(spans[-1][1], b)
+        else:
+            spans.append([a, b])
+    return [(a, b) for a, b in spans]
+
+
+def _pitch_at(voice, t):
+    """t 這一刻正在響的音高；沒有就回傳 None。"""
+    for n in voice:
+        if n['s'] <= t < n['e']:
+            return n['p']
+        if n['s'] > t:
+            break
+    return None
+
+
+def _in_spans(t, spans):
+    for a, b in spans:
+        if a <= t < b:
+            return True
+        if t < a:
+            break
+    return False
+
+
+def yield_to_melody(voices, level=1):
+    """副歌高音時讓 B、C 退開。level：0=關、1=標準、2=強。"""
+    if level <= 0 or len(voices) < 3 or not voices[0]:
+        return voices
+    melody, inner, bass = voices
+    spans = melody_high_spans(melody)
+    if not spans:
+        return voices
+
+    max_below = INNER_MAX_BELOW - (4 if level >= 2 else 0)
+    bass_gap = BASS_MIN_GAP * (2 if level >= 2 else 1)
+    bass_max = BASS_MAX_LEN / (2 if level >= 2 else 1)
+
+    # B 軌：高音段裡離主旋律太遠的音直接讓路（留成休止），其餘標記降音量
+    new_inner, last_mel = [], None
+    for n in inner:
+        t = n['s']
+        if not _in_spans(t, spans):
+            new_inner.append(n)
+            continue
+        mp = _pitch_at(melody, t)
+        if mp is None:
+            mp = last_mel
+        else:
+            last_mel = mp
+        n = dict(n)
+        if mp is not None and mp - n['p'] > max_below:
+            # 標記讓路，不直接刪掉。velocity_range 是拿三軌一起算力度分位數的，
+            # 真的把音移除會讓分位數位移，連帶改到「完全沒動」的主旋律的音量量化
+            #（實測 A 軌字數 2860 -> 2836）。build_track 會在算完音量前濾掉。
+            n['mute'] = True
+        else:
+            n['duck'] = YIELD_DUCK[1]
+        new_inner.append(n)
+
+    # C 軌：高音段裡不刪音，改成「少走動」——起音太密的併進前一個音，變成長音
+    new_bass, prev_in_span = [], None
+    for n in bass:
+        if not _in_spans(n['s'], spans):
+            new_bass.append(n)
+            prev_in_span = None
+            continue
+        if prev_in_span is not None and n['s'] - prev_in_span['s'] < bass_gap:
+            prev_in_span['e'] = max(prev_in_span['e'], n['e'])
+            n = dict(n)
+            n['mute'] = True                           # 同上，留著讓力度分位數不變
+            new_bass.append(n)
+            continue
+        n = dict(n)
+        n['e'] = min(n['e'], n['s'] + bass_max)
+        n['duck'] = YIELD_DUCK[2]
+        new_bass.append(n)
+        prev_in_span = n
+
+    return [melody, new_inner, new_bass]
+
+
+def reduce_to_three(notes, melody_notes=None, inner_rule='near', vol_shift=0, profile=None,
+                    climax=1):
     prof = profile or INSTRUMENTS['piano']
     sus, step = prof['sustain'], prof['step_ok']
     if melody_notes is None:
@@ -878,6 +935,7 @@ def reduce_to_three(notes, melody_notes=None, inner_rule='near', vol_shift=0, pr
     voices = [monophonic(melody), monophonic(inner), monophonic(bass)]
     if not prof.get('drums'):
         voices = resolve_clashes(voices)
+        voices = yield_to_melody(voices, climax)
     return voices
 
 
@@ -1028,7 +1086,7 @@ def build_track(voice, i, tempos, args, level, vrange):
     if str(hm).strip() not in ('', 'auto', 'None'):
         hmin = parse_frac(hm)
     mn = (min_m or 0) if i == 0 else max(hmin, user_min)
-    x = [dict(n) for n in voice]                       # 每一階都從原始音符重算
+    x = [dict(n) for n in voice if not n.get('mute')]  # 每一階都從原始音符重算
     x = drop_short(x, mn)
     # B／C 軌照 min_gap 稀疏；主旋律用一半的間隔，只有在階梯降到很簡單時才會動到，
     # 但至少讓「主旋律本身就太密」的曲子還有路可以降，不會卡在超過上限出不來。
@@ -1071,7 +1129,7 @@ def fit_to_limit(voices, tempos, args):
 DEFAULTS = dict(output=None, limit=DEFAULT_LIMIT, bpm=None, grid=4, octave_shift=0, inner='near',
                 keep_melody=False, flat_volume=False, fill_rest='1/32', min_len='0', min_vel=20,
                 min_dur=0.04, force_quantize=False, retranscribe=False,
-                volume=0, harmony_min='auto', engine='basic-pitch',
+                volume=0, harmony_min='auto', climax=1,
                 min_freq=None, max_freq=None, instrument='piano')
 TRACK_NAMES = ['音軌A', '音軌B', '音軌C']
 AUDIO_EXT = ('.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac')
@@ -1106,24 +1164,21 @@ def run_pipeline(src, args=None, log_cb=None):
             per_track, tempos = load_mml(src)
             if args.keep_melody and len(per_track) > 1:
                 voices = reduce_to_three([n for ns in per_track[1:] for n in ns], per_track[0], args.inner,
-                                         args.volume)
+                                         args.volume, climax=args.climax)
             else:
-                voices = reduce_to_three([n for ns in per_track for n in ns], None, args.inner, args.volume)
+                voices = reduce_to_three([n for ns in per_track for n in ns], None, args.inner, args.volume,
+                                         climax=args.climax)
             kind = 'mml'
         else:
             if ext in AUDIO_EXT and INSTRUMENTS.get(args.instrument, {}).get('drums'):
                 voices, tempos = drums_to_voices(transcribe_drums(src), args)
                 kind, mid_path = 'audio', None
             elif ext in AUDIO_EXT:
-                engine = getattr(args, 'engine', 'basic-pitch')
-                if engine not in ENGINES:
-                    engine = 'basic-pitch'
-                # 每個引擎存自己的 .mid，換引擎時才不會拿到上一個引擎的舊結果
-                mid_path = base + ('.mid' if engine == 'piano' else '.bp.mid')
+                mid_path = base + '.bp.mid'
                 if args.retranscribe or not os.path.exists(mid_path):
-                    transcribe_audio(src, mid_path, engine, args)
+                    transcribe_audio(src, mid_path, args)
                 else:
-                    log('已經採譜過（%s），直接使用' % engine)
+                    log('已經採譜過，直接使用')
                 src, kind = mid_path, 'audio'
             elif ext in ('.mid', '.midi'):
                 mid_path, kind = src, 'midi'
@@ -1131,7 +1186,8 @@ def run_pipeline(src, args=None, log_cb=None):
                 raise ValueError('不認識的副檔名：' + ext)
             if mid_path is not None or ext in ('.mid', '.midi'):
                 notes, tempos = midi_to_notes(src, args)
-                voices = reduce_to_three(notes, None, args.inner, args.volume, INSTRUMENTS.get(args.instrument))
+                voices = reduce_to_three(notes, None, args.inner, args.volume, INSTRUMENTS.get(args.instrument),
+                                         climax=args.climax)
         if INSTRUMENTS.get(args.instrument, {}).get('drums'):
             log('鼓點：大鼓 %d、小鼓 %d、鈸 %d' % tuple(len(v) for v in voices))
         else:
@@ -1172,8 +1228,8 @@ def main():
     ap.add_argument('--retranscribe', action='store_true')
     ap.add_argument('--volume', type=int, default=0, help='整體音量增減（-6~+4），0 = 預設')
     ap.add_argument('--harmony-min', default='auto', help='和聲軌保留的最短音（越小越密、越吵）')
-    ap.add_argument('--engine', choices=list(ENGINES), default='basic-pitch',
-                    help='採譜引擎：basic-pitch（預設，快、音多）/ piano（ByteDance 鋼琴專用）')
+    ap.add_argument('--climax', type=int, choices=[0, 1, 2], default=1,
+                    help='副歌讓路：主旋律衝高音時讓 B／C 兩軌退開。0=關、1=標準、2=強')
     ap.add_argument('--instrument', choices=list(INSTRUMENTS), default='piano',
                     help='目標樂器：' + '/'.join('%s=%s' % (k, v['name']) for k, v in INSTRUMENTS.items()))
     ap.add_argument('--min-freq', type=float, default=None, help='basic-pitch：低於這個頻率的音不要（Hz），可去掉低頻雜訊')

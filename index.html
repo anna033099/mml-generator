@@ -148,12 +148,6 @@
       <option value="violin">小提琴</option><option value="drums">架子鼓</option>
     </select>
   </div>
-  <div class="pick"><span>採譜</span>
-    <select id="engine">
-      <option value="basic-pitch">Basic Pitch</option>
-      <option value="piano">鋼琴模型</option>
-    </select>
-  </div>
   <div class="sp"></div>
   <a class="hbtn" href="/about.html">關於本站</a>
   <button class="hbtn icon" id="theme" title="切換日／夜" aria-label="切換日夜模式"></button>
@@ -238,6 +232,9 @@
           <input type="range" id="den" min="0" max="5" step="1" value="5"></label>
         <label class="f"><span>雜音門檻 <b id="mvLbl">20</b></span>
           <input type="range" id="mv" min="0" max="60" step="5" value="20"></label>
+        <label class="f"><span>副歌讓路</span>
+          <select id="climax"><option value="1">標準</option><option value="2">強</option>
+            <option value="0">關閉</option></select></label>
         <label class="f"><span>B 軌挑音</span>
           <select id="inner"><option value="near">線條平順</option><option value="high">靠近 A 軌</option>
             <option value="long">留長音</option></select></label>
@@ -304,7 +301,7 @@ $('ytGo').addEventListener('click', async () => {
   setStatus('', '下載中…');
   try {
     const r = await fetch('/api/youtube', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ url, params:{ engine:$('engine').value, instrument:$('instrument').value } }) });
+      body: JSON.stringify({ url, params:{ instrument:$('instrument').value } }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || '下載失敗');
     st.job = j.job; poll();
@@ -316,8 +313,7 @@ async function send(body, name) {
   setStatus('', '上傳中…');
   try {
     const q = '?name=' + encodeURIComponent(name) +
-      '&instrument=' + encodeURIComponent($('instrument').value) +
-      '&engine=' + encodeURIComponent($('engine').value);
+      '&instrument=' + encodeURIComponent($('instrument').value);
     const r = await fetch('/api/upload' + q, { method:'POST', body });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || '上傳失敗');
@@ -683,12 +679,12 @@ $('rerender').addEventListener('click', async () => {
     octave_shift: Number($('oct').value),
     volume: Number($('vol').value),
     harmony_min: DEN[Number($('den').value)],
+    climax: Number($('climax').value),
     inner: $('inner').value,
     min_vel: Number($('mv').value),
     grid: Number($('grid').value),
     limit: Number($('limit').value),
     flat_volume: $('flat').checked,
-    engine: $('engine').value,
     instrument: $('instrument').value
   };
   try {

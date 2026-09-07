@@ -14,12 +14,12 @@
 
 ## 功能
 
-- **採譜**：Spotify Basic Pitch（預設，什麼樂器都聽、CPU 上一首 5 分鐘的歌約 6 秒）
-  或 ByteDance 的鋼琴專用模型
+- **採譜**：Spotify Basic Pitch（什麼樂器都聽，CPU 上一首 5 分鐘的歌約 6 秒）
 - **來源**：MP3 / WAV / FLAC / OGG / M4A、MIDI、現成 MML 文字、YouTube 連結
 - **樂器**：鋼琴、瑤箏、箜篌、電吉他、貝斯、笛子、小提琴、架子鼓
 - **試聽**：瀏覽器即時合成，每個樂器有各自的音色；可單軌靜音／獨奏
 - **鋼琴捲軸**：看得到哪些音被留下來，點一下就從那裡開始播
+- **副歌讓路**：主旋律衝高音時讓 B／C 兩軌退開，高音才有重點（主旋律完全不動）
 - **字數上限就是豐富度旋鈕**：調大自動選更密的版本，調小自動變簡單，每軌各自挑
 
 ---
@@ -125,8 +125,7 @@ Gradio 版則是在 `app.py` 開機時補跑一次 pip。
 
 | 專案 | 用途 | 授權 |
 |---|---|---|
-| [Spotify Basic Pitch](https://github.com/spotify/basic-pitch) | 預設採譜模型（內附 ONNX 版） | Apache-2.0 |
-| [ByteDance piano_transcription](https://github.com/bytedance/piano_transcription) | 鋼琴專用採譜模型 | Apache-2.0 |
+| [Spotify Basic Pitch](https://github.com/spotify/basic-pitch) | 採譜模型（內附 ONNX 版） | Apache-2.0 |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | YouTube 抓音訊 | Unlicense |
 | [FFmpeg](https://ffmpeg.org/) | 音訊轉檔 | LGPL / GPL |
 | [librosa](https://librosa.org/) | 音訊分析、鼓點偵測 | ISC |

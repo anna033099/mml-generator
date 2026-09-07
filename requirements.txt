@@ -3,11 +3,6 @@
 # 並把 numpy 降到 1.x，環境裡其他套件會壞掉。請改跑「安裝.bat」，
 # 它會用 --no-deps 只裝套件本體，再用內附的 ONNX 模型（228 KB）跑。
 
-# 採譜引擎二：ByteDance 鋼琴採譜模型
-piano_transcription_inference
-torch
-torchlibrosa
-
 # 音訊與 MIDI
 librosa
 soundfile>=0.12
