@@ -66,20 +66,31 @@ python mabi3.py 歌.mp3 --instrument piano --limit 3000
 ## 部署到 Hugging Face Spaces
 
 GitHub Pages 只能放靜態檔案，跑不了這個工具的 Python 後端。要讓別人用網址直接使用，
-用 Hugging Face Spaces（免費、可跑 Python）：
+用 Hugging Face Spaces（免費、可跑 Python）。
 
-1. 到 <https://huggingface.co/new-space> 建一個 Space，**SDK 選 Docker**
-2. 把這個 repo 的檔案推上去（Space 本身就是一個 git repo）：
+先產生上傳包：
 
 ```bash
-git clone https://huggingface.co/spaces/<你的帳號>/<space 名稱> hf-space
-cd hf-space
-cp ../Dockerfile ../requirements-hf.txt ../mabi3.py ../server.py ../msg.py ../index.html ../about.html .
-git add -A && git commit -m "deploy" && git push
+python make_hf_space.py
 ```
 
-`Dockerfile` 已經處理好 HF 的規矩（監聽 7860、綁 `0.0.0.0`、裝 ffmpeg、
-用 `--no-deps` 裝 basic-pitch）。`server.py` 讀 `HOST` / `PORT` 環境變數，本機行為不變。
+會在 `hf-space/` 生出 10 個檔案（約 120 KB）。到 <https://huggingface.co/new-space>
+建一個 Space，再到 **Files → Add file → Upload files**，把 `hf-space/` 裡的檔案
+全部拖進去就好。之後改了程式，重跑一次這支再上傳一次即可。
+
+SDK 選哪個都可以，上傳包兩種都附了：
+
+- **Gradio**：執行 `app.py`。這個專案其實沒有用 Gradio，Space 的 Gradio SDK
+  做的事只是「跑 app.py，然後把 7860 埠反向代理出去」，所以 `app.py` 直接把
+  自己的 http.server 綁在 7860 上，介面維持原本的 `index.html`。
+  要裝的 apt 套件（ffmpeg）寫在 `packages.txt`。
+- **Docker**：執行 `Dockerfile`，流程比較單純。改用它的話，把 `README.md` 開頭
+  frontmatter 裡的 `sdk: gradio` / `app_file: app.py` 換成
+  `sdk: docker` / `app_port: 7860`。
+
+兩種版本都要處理同一件事：`basic-pitch` 一定要用 `--no-deps` 裝，
+而 pip 的 requirements.txt 格式不支援這個選項。Docker 版寫在 `Dockerfile` 裡，
+Gradio 版則是在 `app.py` 開機時補跑一次 pip。
 
 **上線前先想清楚兩件事：**
 
@@ -125,7 +136,9 @@ git add -A && git commit -m "deploy" && git push
 | `about.html` | 關於本站 |
 | `msg.py` | 印中文提示給 .bat 用（.bat 本身必須是純 ASCII，見檔案內註解） |
 | `安裝.bat` / `啟動網頁.bat` / `轉換.bat` | Windows 一鍵操作 |
-| `Dockerfile` | 部署到 Hugging Face Spaces 用 |
+| `Dockerfile` | 部署到 Hugging Face Spaces（Docker SDK）用 |
+| `deploy/` | 只有雲端要的檔案：`app.py`（Gradio SDK 進入點）、`packages.txt`、Space 首頁 |
+| `make_hf_space.py` | 把上面這些打包成 `hf-space/`，直接上傳到 Space |
 
 ---
 
