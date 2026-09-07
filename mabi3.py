@@ -32,6 +32,7 @@ import os
 import sys
 import math
 import argparse
+import copy
 from fractions import Fraction as F
 from collections import Counter
 
@@ -390,7 +391,13 @@ def velocity_range(voices):
 
 
 def apply_voice_dynamics(voice, i, window, vol_shift, vrange):
-    """把一軌的力度攤到這個聲部自己的音量帶上（就地改 n['v']）。"""
+    """把一軌的力度攤到這個聲部自己的音量帶上（就地改 n['v']）。
+
+    vrange 是 None ＝整份來源都沒有力度資料，也就是「貼上現成 MML」的情況。
+    那些音量是原作者一個一個寫出來的，這裡一律不動——包括副歌讓路的音量調整。
+    （試過對 MML 來源也套用抬升，《梦回还》的 A 軌平均音量會從 12.1 變成 15.0，
+    原作者寫的強弱整片被抹平。刻意不做。）
+    """
     if not vrange:
         return
     lo, hi = vrange
@@ -1233,6 +1240,14 @@ def run_pipeline(src, args=None, log_cb=None):
         mid_path = None
         if ext == '.mml':
             per_track, tempos = load_mml(src)
+            # 貼上現成的 MML 是別人一個音一個音寫出來的。副歌讓路那一整套
+            #（讓路、低八度支撐、主旋律推到最大音量）在這裡一律不套用，
+            # 盡量保留原作者寫的東西。音量本來就不會動（見 apply_voice_dynamics），
+            # 這裡連音符的取捨也不動。
+            if getattr(args, 'climax', 1):
+                log('貼上的樂譜：不套用副歌讓路，保留原作者寫的內容')
+            args = copy.copy(args)
+            args.climax = 0
             if args.keep_melody and len(per_track) > 1:
                 voices = reduce_to_three([n for ns in per_track[1:] for n in ns], per_track[0], args.inner,
                                          args.volume, climax=args.climax)
