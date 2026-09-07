@@ -25,6 +25,8 @@
   button { background:var(--panel2); border:1px solid var(--line); border-radius:6px;
     padding:6px 13px; cursor:pointer; }
   button:hover:not(:disabled) { border-color:var(--muted); }
+  #stale { margin:0 0 16px; padding:11px 14px; border-radius:6px; font-size:15px;
+    color:var(--warn); border:1px solid var(--warn); background:var(--panel); }
   button:disabled { opacity:.35; cursor:default; }
   button.go { background:var(--accent); color:#14161b; border-color:var(--accent); font-weight:600; }
   button.sm { padding:5px 10px; font-size:14px; }
@@ -154,6 +156,8 @@
 </div></header>
 
 <main>
+  <div id="stale" hidden>程式檔案已經更新，但正在跑的伺服器還是舊的。
+    請關掉那個黑色視窗，重新啟動一次，調整才會生效。</div>
   <div class="steps">
     <span><b>1.</b> 丟一首曲子進來</span><span>→</span>
     <span><b>2.</b> 試聽、調整</span><span>→</span>
@@ -302,7 +306,7 @@ $('ytGo').addEventListener('click', async () => {
   try {
     const r = await fetch('/api/youtube', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ url, params:{ instrument:$('instrument').value } }) });
-    const j = await r.json();
+    const j = await r.json(); checkStale(j);
     if (!r.ok) throw new Error(j.error || '下載失敗');
     st.job = j.job; poll();
   } catch(e) { fail(e.message); }
@@ -315,7 +319,7 @@ async function send(body, name) {
     const q = '?name=' + encodeURIComponent(name) +
       '&instrument=' + encodeURIComponent($('instrument').value);
     const r = await fetch('/api/upload' + q, { method:'POST', body });
-    const j = await r.json();
+    const j = await r.json(); checkStale(j);
     if (!r.ok) throw new Error(j.error || '上傳失敗');
     st.job = j.job; poll();
   } catch(e) { fail(e.message); }
@@ -323,7 +327,7 @@ async function send(body, name) {
 async function poll() {
   try {
     const r = await fetch('/api/status?job=' + st.job);
-    const j = await r.json();
+    const j = await r.json(); checkStale(j);
     if (!r.ok) throw new Error(j.error || '查詢失敗');
     const last = j.log && j.log.length ? j.log[j.log.length-1] : '處理中…';
     if (j.status === 'working') { setStatus('', last); setTimeout(poll, 900); return; }
@@ -331,6 +335,11 @@ async function poll() {
     setStatus('done', '完成'); show(j.result);
   } catch(e) { fail(e.message); }
 }
+/* 伺服器回報原始碼已被更新：提醒使用者重開。
+   index.html 每次請求都重讀，mabi3.py 卻只在啟動時載入一次，
+   不提示的話會變成「選項有、功能沒有」。 */
+function checkStale(j) { if (j && j.stale) $('stale').hidden = false; }
+
 function setStatus(cls, text) { const s=$('status'); s.className='on '+cls; $('msg').textContent=text; $('tb').hidden=true; }
 function fail(text, trace) {
   drop.classList.remove('busy'); setStatus('err', text || '轉換失敗');
@@ -690,7 +699,7 @@ $('rerender').addEventListener('click', async () => {
   try {
     const r = await fetch('/api/render', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ job: st.job, params }) });
-    const j = await r.json();
+    const j = await r.json(); checkStale(j);
     if (!r.ok) throw new Error(j.error || '重新產生失敗');
     setStatus('done','完成'); show(j.result);
   } catch(e) { fail(e.message); }

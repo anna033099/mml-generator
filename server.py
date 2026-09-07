@@ -25,6 +25,28 @@ import mabi3  # noqa: E402
 
 JOBS_DIR = os.path.join(HERE, 'jobs')
 JOBS = {}
+
+# Python 是在行程啟動時就把 mabi3.py 讀進記憶體的，之後改檔案不會影響已經在跑的
+# 伺服器。網頁的 index.html 卻是每次請求都從硬碟讀——結果就是「新的選項出現了，
+# 但按下去完全沒作用」，非常難察覺。這裡記下啟動當下的檔案時間，之後如果檔案
+# 變新了就在每個 API 回應裡加上 stale 旗標，網頁會跳出「請重新啟動」的提示。
+_WATCH = [os.path.join(HERE, f) for f in ('mabi3.py', 'server.py', 'msg.py')]
+_MTIME = {}
+for _f in _WATCH:
+    try:
+        _MTIME[_f] = os.path.getmtime(_f)
+    except OSError:
+        pass
+
+
+def sources_changed():
+    for f, t in _MTIME.items():
+        try:
+            if os.path.getmtime(f) != t:
+                return True
+        except OSError:
+            pass
+    return False
 LOCK = threading.Lock()
 ALLOWED = mabi3.AUDIO_EXT + ('.mid', '.midi', '.mml')
 
@@ -97,6 +119,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- helpers ----
     def send_json(self, obj, code=200):
+        if isinstance(obj, dict) and sources_changed():
+            obj = dict(obj, stale=True)
         body = json.dumps(obj, ensure_ascii=False).encode('utf-8')
         self.send_response(code)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
