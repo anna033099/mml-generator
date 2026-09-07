@@ -11,6 +11,10 @@
 onnxruntime
 importlib_resources
 resampy
+# pretty_midi 內部會 import six，但它是用 --no-deps 裝的，six 不會跟著進來，
+# 少了它 basic_pitch 一 import 就掛。scikit-learn / decorator / typing_extensions
+# 由 librosa 帶進來，不用另外寫。
+six
 
 # 音訊與 MIDI
 librosa
