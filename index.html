@@ -236,7 +236,7 @@
           <input type="range" id="den" min="0" max="5" step="1" value="5"></label>
         <label class="f"><span>雜音門檻 <b id="mvLbl">20</b></span>
           <input type="range" id="mv" min="0" max="60" step="5" value="20"></label>
-        <label class="f"><span>副歌讓路 <b id="climaxLbl"></b></span>
+        <label class="f"><span>副歌讓路</span>
           <select id="climax"><option value="1">標準</option><option value="2">強</option>
             <option value="0">關閉</option></select></label>
         <label class="f"><span>B 軌挑音</span>
@@ -360,7 +360,6 @@ function show(res) {
   // 免得變成「選了沒反應」——那種找不出原因的沉默最難查。
   const isMml = res.kind === 'mml';
   $('climax').disabled = isMml;
-  $('climaxLbl').textContent = isMml ? '（貼上的譜不套用，保留原作者寫的）' : '';
 
   const box = $('tracks'); box.innerHTML = '';
   res.tracks.forEach((t,i) => {

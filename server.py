@@ -8,9 +8,13 @@ server.py — mabi3 的網頁介面（只在你自己的電腦上跑，不用架
 
 不需要額外安裝任何網頁套件；採譜功能一樣靠 requirements.txt 裡的東西。
 """
+import atexit
+import glob
 import os
+import shutil
 import sys
 import json
+import tempfile
 import time
 import uuid
 import threading
@@ -23,7 +27,55 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import mabi3  # noqa: E402
 
-JOBS_DIR = os.path.join(HERE, 'jobs')
+# 上傳的音檔、採譜出來的 MIDI、產生的 MML 一律不留在專案資料夾裡。
+# 每次啟動開一個系統暫存資料夾，程式結束就整個刪掉。
+# 這些是使用者自己的音樂檔，沒有理由留在硬碟上；雲端版更是不該把別人的音檔存著。
+TEMP_PREFIX = 'mml-generator-'
+JOBS_DIR = os.path.join(tempfile.gettempdir(), TEMP_PREFIX + str(os.getpid()))
+
+
+_LOCK_FH = None
+
+
+def cleanup_jobs():
+    global _LOCK_FH
+    if _LOCK_FH is not None:
+        try:
+            _LOCK_FH.close()
+        except OSError:
+            pass
+        _LOCK_FH = None
+    shutil.rmtree(JOBS_DIR, ignore_errors=True)
+
+
+def _hold_lock():
+    """在自己的暫存資料夾裡開一個檔案並一直握著，當作「這份還活著」的標記。"""
+    global _LOCK_FH
+    _LOCK_FH = open(os.path.join(JOBS_DIR, '.lock'), 'w')
+
+
+def _is_dead(folder):
+    """判斷別人留下的暫存資料夾是不是已經沒人在用。
+
+    Windows 不允許刪除還被開啟的檔案，所以「.lock 刪得掉」就等於那份已經結束。
+    正常結束會走 atexit 自己清乾淨，這裡處理的是被工作管理員強制結束、
+    或電腦直接斷電那種情況。
+    """
+    lock = os.path.join(folder, '.lock')
+    if not os.path.exists(lock):
+        return True
+    try:
+        os.remove(lock)
+        return True
+    except OSError:
+        return False
+
+
+def sweep_old_jobs():
+    """把上次沒清乾淨的暫存資料夾掃掉。"""
+    for d in glob.glob(os.path.join(tempfile.gettempdir(), TEMP_PREFIX + '*')):
+        if d != JOBS_DIR and os.path.isdir(d) and _is_dead(d):
+            shutil.rmtree(d, ignore_errors=True)
 JOBS = {}
 
 # Python 是在行程啟動時就把 mabi3.py 讀進記憶體的，之後改檔案不會影響已經在跑的
@@ -251,6 +303,9 @@ def main():
     port = int(ports[0]) if ports else int(os.environ.get('PORT') or 8765)
     host = os.environ.get('HOST') or '127.0.0.1'
     os.makedirs(JOBS_DIR, exist_ok=True)
+    _hold_lock()
+    atexit.register(cleanup_jobs)
+    sweep_old_jobs()
     url = 'http://%s:%d' % ('127.0.0.1' if host in ('0.0.0.0', '::') else host, port)
     try:
         httpd = Server((host, port), Handler)
@@ -281,6 +336,8 @@ def main():
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        cleanup_jobs()
 
 
 if __name__ == '__main__':

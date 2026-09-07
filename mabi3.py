@@ -30,7 +30,6 @@ mabi3.py — 一首歌（MP3 / YouTube / MIDI / 現成 MML）→《倩女幽魂�
 import re
 import os
 import sys
-import math
 import argparse
 import copy
 from fractions import Fraction as F
@@ -1151,9 +1150,6 @@ RICHNESS = [
 # 每軌至少要把多長的空隙補起來（讓音延續到下一個音）。
 # 注意不能補太兇：低音補到 1/2 全音符時，低音軌會變成「從頭到尾都在發聲」，
 # 聽起來就是一直有個很低的嗡嗡聲。低音本來就該有換氣和斷點。
-VOICE_FILL = (F(1, 2), F(1, 4), F(1, 4))          # 預設（鋼琴）；實際以 INSTRUMENTS[...]['fill'] 為準
-
-
 def build_track(voice, i, tempos, args, level, vrange):
     """把一軌壓成 MML。level 是 RICHNESS 的一列。"""
     _, hmin, min_gap, window, fill, flat, min_m = level
