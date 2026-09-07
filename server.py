@@ -134,6 +134,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
+        # 不給快取標頭的話，瀏覽器會自己決定要快取多久，改了 index.html 也看不到，
+        # 新加的選項不會出現、送出的參數就少一個，症狀是「調整完全沒作用」。
+        self.send_header('Cache-Control', 'no-store')
         if download_name:
             self.send_header('Content-Disposition', "attachment; filename*=UTF-8''%s" % download_name)
         self.end_headers()
@@ -151,6 +154,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_file(os.path.join(HERE, 'index.html'), 'text/html; charset=utf-8')
         if u.path in ('/about', '/about.html'):
             return self.send_file(os.path.join(HERE, 'about.html'), 'text/html; charset=utf-8')
+        if u.path == '/api/version':
+            # 給「重複啟動」時判斷在跑的那一份是不是舊的用
+            return self.send_json({'ok': True, 'stale': sources_changed()})
         if u.path == '/api/status':
             job = JOBS.get(qs.get('job', [''])[0])
             if not job:
@@ -227,6 +233,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json({'error': 'not found'}, 404)
 
 
+def is_running_stale(url):
+    """已經在跑的那一份是不是舊的程式。連不上或它根本沒有這個端點（＝更舊）也算舊。"""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url + '/api/version', timeout=3) as r:
+            return bool(json.loads(r.read().decode('utf-8')).get('stale'))
+    except Exception:
+        return True
+
+
 def main():
     # 只有「看起來像數字」的參數才當埠號，不然 --no-browser 會被拿去 int() 而炸掉
     ports = [a for a in sys.argv[1:] if a.isdigit()]
@@ -239,10 +255,19 @@ def main():
     try:
         httpd = Server((host, port), Handler)
     except OSError:
-        # 已經有一份在跑了。與其報錯，不如直接把瀏覽器開到那一份去，
-        # 這樣使用者點兩下 .bat 還是「有反應」。
+        # 已經有一份在跑了。問問它載入的程式是不是舊的——關掉黑色視窗不一定會結束
+        # 背後的 python 行程，如果這時直接把瀏覽器開過去，使用者會以為已經重開成功，
+        # 但實際上還在跑舊的程式，改了什麼都不會生效。
+        if is_running_stale(url):
+            print('', flush=True)
+            print('  ！ 已經有一份伺服器在 %s 執行中，而且它載入的是舊的程式。' % url, flush=True)
+            print('    你現在改的東西不會生效。', flush=True)
+            print('', flush=True)
+            print('    請先執行「停止網頁.bat」把它結束掉，再執行一次這個檔案。', flush=True)
+            print('', flush=True)
+            return
         print('網頁已經在執行中：%s' % url, flush=True)
-        print('（這個視窗可以直接關掉。要整個重開，先關掉原本那個黑色視窗。）', flush=True)
+        print('（這個視窗可以直接關掉。要整個重開，先執行「停止網頁.bat」。）', flush=True)
         if '--no-browser' not in sys.argv:
             try:
                 webbrowser.open(url)

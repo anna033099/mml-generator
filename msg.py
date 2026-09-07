@@ -18,6 +18,8 @@ MESSAGES = {
     'installed': '安裝完成！點兩下「啟動網頁.bat」就可以開始用了。',
     'installing': '正在安裝一般套件…',
     'installing_bp': '正在安裝 basic-pitch（用 --no-deps，避免把 numpy 降版、避免拉進 TensorFlow）…',
+    'stopped': '已經把網頁伺服器結束掉了。現在可以點兩下「啟動網頁.bat」重新啟動。',
+    'not_running': '沒有找到正在執行的網頁伺服器（本來就沒開，或用的是別的埠）。',
 }
 
 
