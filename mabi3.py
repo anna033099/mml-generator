@@ -404,6 +404,9 @@ def apply_voice_dynamics(voice, i, window, vol_shift, vrange):
             continue
         t = min(1.0, max(0.0, (sv - lo) / float(hi - lo)))
         v = vmin + t * (vmax - vmin)
+        if n.get('hold'):
+            n['v'] = int(vmax)                         # 副歌的主旋律：鎖在最大音量
+            continue
         v = vmin + round((v - vmin) / step) * step
         # 副歌讓路：退到背景。這裡是「絕對音量單位」，不是音量帶的階距——
         # 乘上 step 的話 B 軌一次就降 8，而 B 的音量帶只有 10~14 寬，會直接壓到聽不見。
@@ -822,7 +825,19 @@ BASS_MIN_GAP = F(1, 8)     # 高音段裡 C 軌的最小起音間隔：少走動
 #（實測 88~95%，等於低音從頭壓到尾）。加上長度上限才會留出空隙。
 # 實測 1/4：發聲時間降到 72~89%，字數幾乎沒變（1% 內）；1/8 更空但開始花字數。
 BASS_MAX_LEN = F(1, 4)
-YIELD_DUCK = (0, 2, 1)     # 高音段裡各軌音量要降幾個單位（A 不動）
+YIELD_DUCK = (0, 2, 1)     # 高音段裡 B／C 兩軌音量要降幾個單位
+# 主旋律在高音段要「推上去」幾個音量單位。量過四首歌，主旋律副歌內外的平均音量
+# 分別是 12.6/12.9、13.2/12.7、12.6/12.6、13.2/13.3——等於整首沒有起伏，
+# 副歌那些高音跟主歌一樣大聲，聽起來就沒力。採譜出來的力度本來就分不太出段落，
+# 再經過 _smooth_velocity 的移動中位數又更平，所以要在這裡補一個抬升。
+# 做法是「鎖在音量帶的最大值」而不是「加幾個單位」：段落內不用再換音量，
+# 反而比原本更省字（加法版試過，A 軌會超過 3000 字而掉到「單量」那一階，
+# 整軌只剩一個音量，副歌內外都變 15，起伏全沒了）。
+# 而且固定音量正好就是「很穩、強而有力」該有的樣子。
+# 高音段裡，主旋律底下沒有任何 B 軌的音時，補一個「低八度」的支撐音。
+# 只讓路不補支撐的話，副歌有 32~61% 的主旋律音底下是空的，高音會變得很單薄。
+# 低八度是編曲上讓高音有厚度最常用的手法，而且音名相同，不會影響和聲。
+SUPPORT_OCTAVE = True
 
 
 def melody_high_spans(melody, pct=YIELD_HI_PCT):
@@ -853,6 +868,22 @@ def _pitch_at(voice, t):
     return None
 
 
+def _mono_keep(notes):
+    """跟 monophonic 一樣把重疊的音截斷，但保留 dict 上的其他鍵。
+
+    monophonic 會重建 dict、只留五個欄位，duck / mute / support 這些標記會被丟掉。
+    """
+    v = sorted(notes, key=lambda n: n['s'])
+    out = []
+    for i, n in enumerate(v):
+        e = min(n['e'], v[i + 1]['s']) if i + 1 < len(v) else n['e']
+        if e > n['s']:
+            m = dict(n)
+            m['e'] = e
+            out.append(m)
+    return out
+
+
 def _in_spans(t, spans):
     for a, b in spans:
         if a <= t < b:
@@ -862,8 +893,12 @@ def _in_spans(t, spans):
     return False
 
 
-def yield_to_melody(voices, level=1):
-    """副歌高音時讓 B、C 退開。level：0=關、1=標準、2=強。"""
+def yield_to_melody(voices, level=1, lo=MABI_LOW):
+    """副歌高音時讓 B、C 退開。level：0=關、1=標準、2=強。
+
+    lo：目標樂器音域的下限。低八度支撐音是在 midi_to_notes 套完音域之後才產生的，
+    會繞過那道檢查——笛子（36~96）的支撐音可能掉到 28，在遊戲裡是沒聲音的。
+    """
     if level <= 0 or len(voices) < 3 or not voices[0]:
         return voices
     melody, inner, bass = voices
@@ -916,7 +951,43 @@ def yield_to_melody(voices, level=1):
         new_bass.append(n)
         prev_in_span = n
 
+    # 主旋律：不動音高、不動節奏，只把高音段的音量推上去。
+    # 這是唯一會動到 A 軌的地方，而且只動 n['duck']（負值＝抬升），
+    # 音符本身一個都沒改。
+    melody = [dict(n, hold=True) if _in_spans(n['s'], spans) else n
+              for n in melody]
+
+    if SUPPORT_OCTAVE:
+        new_inner = _add_octave_support(melody, new_inner, spans, lo)
+
     return [melody, new_inner, new_bass]
+
+
+def _add_octave_support(melody, inner, spans, lo=MABI_LOW):
+    """高音段裡主旋律底下空著的地方，用低八度補一個支撐音。
+
+    只讓 B 軌退開、不補支撐的話，副歌有 32~61% 的主旋律音底下完全沒有東西，
+    高音就變成孤零零一條線，聽起來很虛。低八度支撐是編曲上讓高音有厚度最直接的
+    做法，音名跟主旋律相同，不會改變和聲。
+    """
+    # 被標成 mute 的音只是留著讓 velocity_range 的分位數不變，不參與位置計算
+    audible = [n for n in inner if not n.get('mute')]
+    muted = [n for n in inner if n.get('mute')]
+    add = []
+    for m in melody:
+        if not _in_spans(m['s'], spans):
+            continue
+        mid = m['s'] + (m['e'] - m['s']) / 2
+        if _pitch_at(audible, m['s']) is not None or _pitch_at(audible, mid) is not None:
+            continue                                   # 底下已經有東西了
+        p = m['p'] - 12
+        if p < lo:
+            continue                               # 掉出樂器音域就不補
+        add.append({'s': m['s'], 'e': m['e'], 'p': p, 'v': m['v'],
+                    'vel': m.get('vel', 0), 'duck': YIELD_DUCK[1]})
+    if not add:
+        return inner
+    return sorted(_mono_keep(audible + add) + muted, key=lambda n: n['s'])
 
 
 def reduce_to_three(notes, melody_notes=None, inner_rule='near', vol_shift=0, profile=None,
@@ -935,7 +1006,7 @@ def reduce_to_three(notes, melody_notes=None, inner_rule='near', vol_shift=0, pr
     voices = [monophonic(melody), monophonic(inner), monophonic(bass)]
     if not prof.get('drums'):
         voices = resolve_clashes(voices)
-        voices = yield_to_melody(voices, climax)
+        voices = yield_to_melody(voices, climax, (prof['range'] or (MABI_LOW, MABI_HIGH))[0])
     return voices
 
 
