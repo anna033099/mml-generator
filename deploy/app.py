@@ -14,6 +14,27 @@ import subprocess
 import sys
 
 
+# ZeroGPU 硬體開機時會掃描程式裡有沒有被 @spaces.GPU 裝飾的函式，掃不到就直接判定
+# 啟動失敗（Runtime error: No @spaces.GPU function detected during startup），
+# 跟程式寫得對不對無關。
+#
+# 這個專案從頭到尾跑 CPU：Basic Pitch 走的是 ONNX，沒有任何一段需要 GPU。
+# 但 Space 建立後若沒有 PRO 就不能把硬體降回免費的 cpu-basic，所以留一個空的
+# 函式給它掃，讓 ZeroGPU 上的 Space 也能正常啟動。這個函式永遠不會被呼叫。
+#
+# cpu-basic 的映像檔裡沒有 spaces 這個套件，import 會失敗，整段跳過就好。
+try:
+    import spaces
+
+    @spaces.GPU
+    def _zerogpu_probe():
+        return None
+
+    print('[app] 偵測到 ZeroGPU 環境，已註冊佔位函式（實際運算仍在 CPU）', flush=True)
+except Exception:
+    pass
+
+
 def ensure_basic_pitch():
     """補裝 basic-pitch。
 
