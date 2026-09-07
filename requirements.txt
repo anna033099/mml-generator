@@ -1,0 +1,24 @@
+# pip install -r requirements.txt 就安全（不會動到 numpy / torch）。
+# basic-pitch 不能寫在這裡：直接裝它會連 TensorFlow 一起拉進來，
+# 並把 numpy 降到 1.x，環境裡其他套件會壞掉。請改跑「安裝.bat」，
+# 它會用 --no-deps 只裝套件本體，再用內附的 ONNX 模型（228 KB）跑。
+
+# 採譜引擎二：ByteDance 鋼琴採譜模型
+piano_transcription_inference
+torch
+torchlibrosa
+
+# 音訊與 MIDI
+librosa
+soundfile>=0.12
+mido
+numpy
+
+# basic-pitch 用 ONNX 跑所需要的東西（這些本身不會拉 TensorFlow）
+onnxruntime
+importlib_resources
+resampy
+
+# YouTube 連結（imageio-ffmpeg 自帶 ffmpeg，不用另外安裝）
+yt-dlp
+imageio-ffmpeg

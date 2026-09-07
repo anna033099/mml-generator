@@ -1,0 +1,28 @@
+# 每次轉換的暫存資料夾：原始音檔、採譜出來的 MIDI、產生的 MML。
+# 裡面是使用者自己的音樂檔，動輒幾十 MB，不該進版本庫。
+jobs/
+
+# imageio-ffmpeg 複製出來的 ffmpeg 執行檔（80 MB 以上，各平台不同，會自己重建）
+.bin/
+
+# 開發過程的備份
+*.bak
+*.bak[0-9]
+*.orig
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 轉換結果
+*.mml
+!範例/*.mml
+
+# 編輯器 / 系統
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

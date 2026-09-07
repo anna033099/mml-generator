@@ -1,0 +1,22 @@
+# 給 Hugging Face Spaces 用的精簡版依賴。
+# 本機請用 requirements.txt（外加安裝.bat 的第二段）。
+#
+# 這裡刻意「不裝」torch / torchlibrosa / piano_transcription_inference：
+# 那是 ByteDance 鋼琴專用採譜模型，光 torch 就 200 MB 以上，第一次採譜還要再下載
+# 165 MB 的權重檔，對免費 Space 太重。雲端版只提供 Basic Pitch
+# （模型只有 228 KB、附在套件裡、CPU 上一首歌約 6 秒）。
+# 在雲端選「鋼琴模型」會得到一句清楚的錯誤訊息，不會整個掛掉。
+
+# basic-pitch 走 ONNX 需要的東西（這些本身不會拉 TensorFlow）
+onnxruntime
+importlib_resources
+resampy
+
+# 音訊與 MIDI
+librosa
+soundfile>=0.12
+mido
+numpy
+
+# YouTube 連結（雲端的 ffmpeg 由 Dockerfile 用 apt 裝）
+yt-dlp
