@@ -126,3 +126,12 @@ git add -A && git commit -m "deploy" && git push
 | `msg.py` | 印中文提示給 .bat 用（.bat 本身必須是純 ASCII，見檔案內註解） |
 | `安裝.bat` / `啟動網頁.bat` / `轉換.bat` | Windows 一鍵操作 |
 | `Dockerfile` | 部署到 Hugging Face Spaces 用 |
+
+---
+
+## 授權
+
+本專案採用 [MIT License](LICENSE)，可自由使用、修改、再散布，附上授權條款即可。
+
+上表列出的第三方專案各自有自己的授權，另外注意 FFmpeg 依編譯選項可能是 GPL；
+如果你要把這個工具再包成產品散布，記得分別確認。
